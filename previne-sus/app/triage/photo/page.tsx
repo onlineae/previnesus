@@ -20,7 +20,7 @@ import AudioRecorder from '@/components/AudioRecorder';
 import MedicalReportSheet from '@/components/MedicalReportSheet';
 import { storage, TriageCase } from '@/lib/storage';
 import { MANDATORY_LEGAL_DISCLAIMER } from '@/lib/manchester';
-import { callGeminiVision } from '@/lib/gemini';
+import { callGeminiVision, analyzeImagePixels } from '@/lib/gemini';
 import { VISION_TRIAGE_SYSTEM_PROMPT } from '@/lib/prompts';
 
 const CATEGORIES = [
@@ -114,6 +114,9 @@ export default function PhotoTriagePage() {
         }
       }
 
+      // Pre-analyze image pixels with client-side canvas before network request
+      const visionMetrics = imageBase64 ? await analyzeImagePixels(imageBase64) : undefined;
+
       let triageData: any = null;
 
       try {
@@ -132,6 +135,7 @@ export default function PhotoTriagePage() {
             },
             previousImageBase64,
             previousNotes,
+            visionMetrics,
             apiKey: storage.getApiKey()
           })
         });
@@ -167,7 +171,8 @@ ${previousImageBase64 ? `NOTA: A segunda imagem anexada é do histórico anterio
           VISION_TRIAGE_SYSTEM_PROMPT,
           promptDetails,
           imagesToAnalyze,
-          storage.getApiKey()
+          storage.getApiKey(),
+          visionMetrics
         );
       }
 

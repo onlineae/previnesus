@@ -12,6 +12,7 @@ export async function POST(req: NextRequest) {
       symptoms = {}, 
       previousImageBase64,
       previousNotes,
+      visionMetrics,
       apiKey 
     } = body;
 
@@ -41,7 +42,8 @@ ${previousImageBase64 ? `NOTA: A segunda imagem anexada é do histórico anterio
       VISION_TRIAGE_SYSTEM_PROMPT,
       promptDetails,
       imagesToAnalyze,
-      apiKey
+      apiKey,
+      visionMetrics
     );
 
     return NextResponse.json({

@@ -5,7 +5,7 @@ import {
   SYMPTOM_TRIAGE_SYSTEM_PROMPT 
 } from './prompts';
 
-interface ImageVisionMetrics {
+export interface ImageVisionMetrics {
   deepWoundRatio: number;
   erythemaRatio: number;
   purulentRatio: number;
@@ -14,7 +14,7 @@ interface ImageVisionMetrics {
 }
 
 // Client-side pixel-level computer vision analyzer for triage images
-async function analyzeImagePixels(imgDataUrl?: string): Promise<ImageVisionMetrics> {
+export async function analyzeImagePixels(imgDataUrl?: string): Promise<ImageVisionMetrics> {
   const fallback: ImageVisionMetrics = {
     deepWoundRatio: 0,
     erythemaRatio: 0,
@@ -32,7 +32,7 @@ async function analyzeImagePixels(imgDataUrl?: string): Promise<ImageVisionMetri
       const img = new Image();
       img.crossOrigin = 'anonymous';
 
-      const timer = setTimeout(() => resolve(fallback), 1500);
+      const timer = setTimeout(() => resolve(fallback), 4000);
 
       img.onload = () => {
         clearTimeout(timer);
@@ -124,7 +124,8 @@ export async function callGeminiVision(
   systemPrompt: string,
   userPrompt: string,
   imageBase64List: string[] = [],
-  apiKey?: string
+  apiKey?: string,
+  providedMetrics?: ImageVisionMetrics
 ): Promise<any> {
   const key = apiKey || process.env.GEMINI_API_KEY || process.env.NEXT_PUBLIC_GEMINI_API_KEY;
 
@@ -164,7 +165,29 @@ export async function callGeminiVision(
         const data = await response.json();
         const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
         if (text) {
-          return JSON.parse(text);
+          const parsed = JSON.parse(text);
+          const m = providedMetrics;
+          if (m && (m.deepWoundRatio > 0.008 || m.necroticRatio > 0.008)) {
+            parsed.manchesterColor = 'red';
+            parsed.urgencyLabel = 'Vermelho - Emergência (Atendimento Imediato)';
+            parsed.recommendedFacility = 'UPA 24h ou SAMU 192';
+            parsed.maxWaitTime = '0 minutos (Atendimento Imediato)';
+          } else if (m && (m.deepWoundRatio > 0.0015 || m.purulentRatio > 0.005)) {
+            if (parsed.manchesterColor === 'green' || parsed.manchesterColor === 'blue') {
+              parsed.manchesterColor = 'orange';
+              parsed.urgencyLabel = 'Laranja - Muito Urgente (Atendimento em até 10 minutos)';
+              parsed.recommendedFacility = 'UPA 24h';
+              parsed.maxWaitTime = '10 minutos';
+            }
+          } else if (m && (m.deepWoundRatio > 0.0002 || m.erythemaRatio > 0.025)) {
+            if (parsed.manchesterColor === 'green' || parsed.manchesterColor === 'blue') {
+              parsed.manchesterColor = 'yellow';
+              parsed.urgencyLabel = 'Amarelo - Urgente (Avaliação em até 60 minutos)';
+              parsed.recommendedFacility = 'UPA 24h ou Posto de Saúde (UBS)';
+              parsed.maxWaitTime = '60 minutos';
+            }
+          }
+          return parsed;
         }
       } else {
         console.warn('Gemini API call returned non-200 status:', response.status);
@@ -175,11 +198,15 @@ export async function callGeminiVision(
   }
 
   // Clinical Computer Vision & Decision Engine (Runs locally, instantly and offline)
-  return await simulateClinicalResponse(userPrompt, imageBase64List);
+  return await simulateClinicalResponse(userPrompt, imageBase64List, providedMetrics);
 }
 
 // Highly realistic Brazilian SUS Clinical Decision Engine
-async function simulateClinicalResponse(prompt: string, imageBase64List: string[] = []) {
+async function simulateClinicalResponse(
+  prompt: string, 
+  imageBase64List: string[] = [],
+  providedMetrics?: ImageVisionMetrics
+) {
   const pLower = prompt.toLowerCase();
 
   // 1. Prescription check
@@ -338,9 +365,20 @@ async function simulateClinicalResponse(prompt: string, imageBase64List: string[
 
   // 4. ADVANCED COMPUTER VISION & CLINICAL TRIAGE ENGINE
   // Analyzes image pixels + clinical complaints to determine actual severity
-  const metrics = await analyzeImagePixels(imageBase64List[0]);
+  const metrics = providedMetrics || await analyzeImagePixels(imageBase64List[0]);
 
-  const isWound = pLower.includes('ferida') || pLower.includes('corte') || pLower.includes('úlcera') || pLower.includes('ulcera') || pLower.includes('queixa: ferida');
+  const isWound = 
+    pLower.includes('ferida') || 
+    pLower.includes('corte') || 
+    pLower.includes('úlcera') || 
+    pLower.includes('ulcera') || 
+    pLower.includes('machucad') || 
+    pLower.includes('sangue') || 
+    pLower.includes('sangrando') || 
+    pLower.includes('abert') || 
+    pLower.includes('queixa: ferida') ||
+    metrics.deepWoundRatio > 0.0005 ||
+    metrics.edgeContrastRatio > 0.008;
   const isDental = pLower.includes('dente') || pLower.includes('boca') || pLower.includes('gengiva') || pLower.includes('inchaço') || pLower.includes('queixa: odonto');
   const isEye = pLower.includes('olho') || pLower.includes('visão') || pLower.includes('conjuntivite') || pLower.includes('queixa: olhos');
 
@@ -349,13 +387,13 @@ async function simulateClinicalResponse(prompt: string, imageBase64List: string[
   const hasPurulent = pLower.includes('pus ou secreção: sim') || pLower.includes('pus') || pLower.includes('secreção') || metrics.purulentRatio > 0.006;
 
   // Severe Open Wound / Critical Emergency (Vermelho) Indicators:
-  // - Significant blood / deep flesh pixels (> 1.2%)
+  // - Significant blood / deep flesh pixels (> 1%)
   // - Necrotic tissue (> 0.8%)
   // - Sharp laceration edges with deep blood
   // - Explicit text keywords indicating deep wound, severe trauma, or hemorrhage
   const isSevereWound = 
-    metrics.deepWoundRatio > 0.010 ||
-    (metrics.deepWoundRatio > 0.005 && metrics.edgeContrastRatio > 0.03) ||
+    metrics.deepWoundRatio > 0.008 ||
+    (metrics.deepWoundRatio > 0.004 && metrics.edgeContrastRatio > 0.02) ||
     metrics.necroticRatio > 0.008 ||
     pLower.includes('muito aberta') ||
     pLower.includes('muito fundo') ||
@@ -373,23 +411,23 @@ async function simulateClinicalResponse(prompt: string, imageBase64List: string[
   // - Dental condition with severe swelling/fever
   const isVeryUrgent = 
     isSevereWound ||
-    metrics.deepWoundRatio > 0.002 ||
-    metrics.edgeContrastRatio > 0.025 ||
+    metrics.deepWoundRatio > 0.0015 ||
+    metrics.edgeContrastRatio > 0.02 ||
     hasPurulent ||
-    metrics.erythemaRatio > 0.10 ||
-    (isWound && (hasPain || hasHeatOrFever || metrics.deepWoundRatio > 0.0006)) ||
+    metrics.erythemaRatio > 0.08 ||
+    (isWound && (hasPain || hasHeatOrFever || metrics.deepWoundRatio > 0.0004)) ||
     (isDental && (hasHeatOrFever || pLower.includes('inchaço')));
 
   // Urgent (Amarelo) Indicators:
-  // - Any open wound category (an open cut or ulcer is ALWAYS at least Yellow, never Green)
+  // - Any open wound category (an open cut or ulcer is ALWAYS at least Yellow in Manchester, never Green)
   // - Mild erythema (> 3%)
   // - Reported pain
   // - Any dental or eye complaint
   const isUrgent = 
     isVeryUrgent ||
     isWound ||
-    metrics.deepWoundRatio > 0.0003 ||
-    metrics.erythemaRatio > 0.03 ||
+    metrics.deepWoundRatio > 0.0002 ||
+    metrics.erythemaRatio > 0.025 ||
     hasPain ||
     isDental ||
     isEye;
@@ -403,6 +441,13 @@ async function simulateClinicalResponse(prompt: string, imageBase64List: string[
     color = 'yellow';
   } else {
     color = 'green';
+  }
+
+  // MANDATORY CLINICAL SAFETY GUARD:
+  // In the Brazilian Manchester Protocol, an open wound, cut, laceration or ulcer
+  // is NEVER classified as Green. Its absolute minimum baseline is Yellow (Urgente).
+  if (isWound && color === 'green') {
+    color = 'yellow';
   }
 
   // Build custom Manchester diagnosis according to computed severity

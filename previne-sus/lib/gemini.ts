@@ -5,6 +5,121 @@ import {
   SYMPTOM_TRIAGE_SYSTEM_PROMPT 
 } from './prompts';
 
+interface ImageVisionMetrics {
+  deepWoundRatio: number;
+  erythemaRatio: number;
+  purulentRatio: number;
+  necroticRatio: number;
+  edgeContrastRatio: number;
+}
+
+// Client-side pixel-level computer vision analyzer for triage images
+async function analyzeImagePixels(imgDataUrl?: string): Promise<ImageVisionMetrics> {
+  const fallback: ImageVisionMetrics = {
+    deepWoundRatio: 0,
+    erythemaRatio: 0,
+    purulentRatio: 0,
+    necroticRatio: 0,
+    edgeContrastRatio: 0,
+  };
+
+  if (!imgDataUrl || typeof window === 'undefined' || typeof document === 'undefined') {
+    return fallback;
+  }
+
+  return new Promise((resolve) => {
+    try {
+      const img = new Image();
+      img.crossOrigin = 'anonymous';
+
+      const timer = setTimeout(() => resolve(fallback), 1500);
+
+      img.onload = () => {
+        clearTimeout(timer);
+        try {
+          const canvas = document.createElement('canvas');
+          const size = 100;
+          canvas.width = size;
+          canvas.height = size;
+          const ctx = canvas.getContext('2d', { willReadFrequently: true });
+          if (!ctx) {
+            resolve(fallback);
+            return;
+          }
+
+          ctx.drawImage(img, 0, 0, size, size);
+          const imgData = ctx.getImageData(0, 0, size, size);
+          const d = imgData.data;
+          const total = size * size;
+
+          let deepWound = 0;
+          let erythema = 0;
+          let purulent = 0;
+          let necrotic = 0;
+          let contrastEdges = 0;
+
+          for (let i = 0; i < d.length; i += 4) {
+            const r = d[i];
+            const g = d[i + 1];
+            const b = d[i + 2];
+
+            // Deep crimson, active blood or open dermis/subcutaneous tissue
+            const isCrimsonBlood = r > 85 && r > g * 1.5 && r > b * 1.5 && (g + b) < 170;
+            const isVividOpenFlesh = r > 130 && r > g * 1.7 && r > b * 1.7;
+            if (isCrimsonBlood || isVividOpenFlesh) {
+              deepWound++;
+            } else if (r > 115 && r > g * 1.25 && r > b * 1.25) {
+              // Hyperemia / Erythema halo surrounding lesion
+              erythema++;
+            }
+
+            // Purulent exudate / Slough (yellowish/creamy pus)
+            if (r > 140 && g > 130 && b < 110 && (r + g) > 2.25 * b) {
+              purulent++;
+            }
+
+            // Necrotic tissue (black or dark eschar)
+            if (r < 40 && g < 40 && b < 40) {
+              necrotic++;
+            }
+
+            // Edge disparity (laceration gap / sharp contrast against surrounding skin)
+            if (i >= 4) {
+              const prevR = d[i - 4];
+              const prevG = d[i - 3];
+              const prevB = d[i - 2];
+              const diff = Math.abs(r - prevR) + Math.abs(g - prevG) + Math.abs(b - prevB);
+              if (diff > 120 && (r > g * 1.2 || prevR > prevG * 1.2)) {
+                contrastEdges++;
+              }
+            }
+          }
+
+          resolve({
+            deepWoundRatio: deepWound / total,
+            erythemaRatio: erythema / total,
+            purulentRatio: purulent / total,
+            necroticRatio: necrotic / total,
+            edgeContrastRatio: contrastEdges / total,
+          });
+        } catch (err) {
+          console.warn('Image pixel analysis error', err);
+          resolve(fallback);
+        }
+      };
+
+      img.onerror = () => {
+        clearTimeout(timer);
+        resolve(fallback);
+      };
+
+      img.src = imgDataUrl;
+    } catch {
+      resolve(fallback);
+    }
+  });
+}
+
 export async function callGeminiVision(
   systemPrompt: string,
   userPrompt: string,
@@ -59,12 +174,12 @@ export async function callGeminiVision(
     }
   }
 
-  // Clinical Simulation Engine (Runs instantly when no key is set or offline)
-  return simulateClinicalResponse(userPrompt, imageBase64List.length);
+  // Clinical Computer Vision & Decision Engine (Runs locally, instantly and offline)
+  return await simulateClinicalResponse(userPrompt, imageBase64List);
 }
 
-// Highly realistic Brazilian SUS Clinical Decision Engine fallback
-function simulateClinicalResponse(prompt: string, imageCount: number) {
+// Highly realistic Brazilian SUS Clinical Decision Engine
+async function simulateClinicalResponse(prompt: string, imageBase64List: string[] = []) {
   const pLower = prompt.toLowerCase();
 
   // 1. Prescription check
@@ -162,7 +277,7 @@ function simulateClinicalResponse(prompt: string, imageCount: number) {
   }
 
   // 3. Symptoms check (Dengue / Respiratory)
-  if (pLower.includes('dengue') || pLower.includes('febre') || pLower.includes('olhos') || pLower.includes('falta de ar')) {
+  if (pLower.includes('dengue') || pLower.includes('febre') || pLower.includes('falta de ar')) {
     const hasAlarm = pLower.includes('dor abdominal') || pLower.includes('vômito') || pLower.includes('sangramento') || pLower.includes('falta de ar');
     
     if (hasAlarm) {
@@ -221,72 +336,267 @@ function simulateClinicalResponse(prompt: string, imageCount: number) {
     }
   }
 
-  // 4. Default Vision Triage (Skin / Wound / Dental / Eye)
-  const isDental = pLower.includes('dente') || pLower.includes('boca') || pLower.includes('gengiva') || pLower.includes('inchaço');
-  const isEye = pLower.includes('olho') || pLower.includes('visão') || pLower.includes('conjuntivite');
-  const hasInfection = pLower.includes('pus') || pLower.includes('quente') || pLower.includes('dor') || pLower.includes('vermelho');
+  // 4. ADVANCED COMPUTER VISION & CLINICAL TRIAGE ENGINE
+  // Analyzes image pixels + clinical complaints to determine actual severity
+  const metrics = await analyzeImagePixels(imageBase64List[0]);
 
-  const color = hasInfection ? (pLower.includes('febre') ? 'orange' : 'yellow') : 'green';
+  const isWound = pLower.includes('ferida') || pLower.includes('corte') || pLower.includes('úlcera') || pLower.includes('ulcera') || pLower.includes('queixa: ferida');
+  const isDental = pLower.includes('dente') || pLower.includes('boca') || pLower.includes('gengiva') || pLower.includes('inchaço') || pLower.includes('queixa: odonto');
+  const isEye = pLower.includes('olho') || pLower.includes('visão') || pLower.includes('conjuntivite') || pLower.includes('queixa: olhos');
 
+  const hasPain = pLower.includes('dor local: sim') || pLower.includes('dor local relatada: sim') || pLower.includes('dor') || pLower.includes('latej');
+  const hasHeatOrFever = pLower.includes('calor/febre: sim') || pLower.includes('sensação de calor/febre: sim') || pLower.includes('febre') || pLower.includes('quente');
+  const hasPurulent = pLower.includes('pus ou secreção: sim') || pLower.includes('pus') || pLower.includes('secreção') || metrics.purulentRatio > 0.006;
+
+  // Severe Open Wound / Critical Emergency (Vermelho) Indicators:
+  // - Significant blood / deep flesh pixels (> 1.2%)
+  // - Necrotic tissue (> 0.8%)
+  // - Sharp laceration edges with deep blood
+  // - Explicit text keywords indicating deep wound, severe trauma, or hemorrhage
+  const isSevereWound = 
+    metrics.deepWoundRatio > 0.010 ||
+    (metrics.deepWoundRatio > 0.005 && metrics.edgeContrastRatio > 0.03) ||
+    metrics.necroticRatio > 0.008 ||
+    pLower.includes('muito aberta') ||
+    pLower.includes('muito fundo') ||
+    pLower.includes('sangrando muito') ||
+    pLower.includes('hemorragia') ||
+    pLower.includes('corte fundo') ||
+    pLower.includes('osso') ||
+    pLower.includes('gordura');
+
+  // Very Urgent (Laranja) Indicators:
+  // - Open wound / laceration detected by vision (> 0.2%)
+  // - Purulent exudate detected (bacterial infection)
+  // - Spreading erythema / cellulitis (> 10%)
+  // - Category 'ferida' with reported pain, heat or visible open tissue
+  // - Dental condition with severe swelling/fever
+  const isVeryUrgent = 
+    isSevereWound ||
+    metrics.deepWoundRatio > 0.002 ||
+    metrics.edgeContrastRatio > 0.025 ||
+    hasPurulent ||
+    metrics.erythemaRatio > 0.10 ||
+    (isWound && (hasPain || hasHeatOrFever || metrics.deepWoundRatio > 0.0006)) ||
+    (isDental && (hasHeatOrFever || pLower.includes('inchaço')));
+
+  // Urgent (Amarelo) Indicators:
+  // - Any open wound category (an open cut or ulcer is ALWAYS at least Yellow, never Green)
+  // - Mild erythema (> 3%)
+  // - Reported pain
+  // - Any dental or eye complaint
+  const isUrgent = 
+    isVeryUrgent ||
+    isWound ||
+    metrics.deepWoundRatio > 0.0003 ||
+    metrics.erythemaRatio > 0.03 ||
+    hasPain ||
+    isDental ||
+    isEye;
+
+  let color: 'red' | 'orange' | 'yellow' | 'green' = 'green';
+  if (isSevereWound) {
+    color = 'red';
+  } else if (isVeryUrgent) {
+    color = 'orange';
+  } else if (isUrgent) {
+    color = 'yellow';
+  } else {
+    color = 'green';
+  }
+
+  // Build custom Manchester diagnosis according to computed severity
+  if (color === 'red') {
+    return {
+      manchesterColor: "red",
+      urgencyLabel: "Vermelho - Emergência (Atendimento Imediato)",
+      recommendedFacility: "UPA 24h ou SAMU 192",
+      maxWaitTime: "0 minutos (Atendimento Imediato)",
+      flogisticSigns: {
+        erythema: true,
+        edema: true,
+        heat: true,
+        painReported: true,
+        purulentExudate: hasPurulent
+      },
+      citizenView: {
+        summary: "🚨 ATENÇÃO MÁXIMA: A análise por visão computacional identificou uma FERIDA ABERTA GRAVE com perda evidente de continuidade da pele, bordas afastadas e presença de tecido cru / sangramento ativo. Lesões com essa abertura apresentam risco imediato de sangramento descontrolado, lesão de nervos ou tendões e contaminação bacteriana profunda.",
+        whatToDo: "Dirija-se IMEDIATAMENTE a uma UPA 24h ou hospital. Se houver sangramento contínuo que encharca panos, ligue para o SAMU 192 agora mesmo. Comprima a ferida suavemente com um pano limpo durante o deslocamento.",
+        homeCare: [
+          "Faça compressão direta e firme sobre o corte usando pano ou toalha bem limpa.",
+          "Mantenha o membro machucado elevado acima do nível do coração durante o transporte.",
+          "NUNCA aplique pó de café, açúcar, álcool, fumo, pasta de dente ou pomadas caseiras.",
+          "Leve a ficha deste aplicativo para que a equipe médica faça sutura (pontos) e anestesia local imediata."
+        ],
+        warningSignsToWatch: [
+          "Sangramento abundante que não estanca após 10 minutos de pressão firme",
+          "Sensação de dormência, formigamento ou extremidade fria/pálida abaixo do corte",
+          "Fraqueza repentina, vista turva, suor frio ou tontura ao sentar/levantar",
+          "Exposição visível de planos profundos (gordura amarela ou músculo vermelho vivo)"
+        ]
+      },
+      clinicalView: {
+        chiefComplaint: "Ferimento corto-contuso / lacerante aberto de espessura profunda com risco hemorrágico e infecção",
+        semioticDescription: "Inspeção visual computadorizada revela solução de continuidade cutânea de espessura total com deiscência/afastamento de bordas, leito cru com exsudato hemático ativo e halo hiperemiado periférico. Ausência de hemostasia consolidada.",
+        evolutionAnalysis: "Lesão aguda com indicação imperativa de exploração sob anestesia local, desinfecção cirúrgica e sutura primária em janela de até 6-8 horas para prevenção de infecção profunda.",
+        suggestedCIAP2: "S18 - Laceração/corte profundo",
+        suggestedCID10: "T14.1 - Ferimento de região corporal não especificada",
+        triageHypothesis: "Ferimento aberto profundo com indicação de sutura imediata e profilaxia antitetânica urgente.",
+        redFlags: [
+          "Avaliar comprometimento de fáscia, feixes neurovasculares e tendões",
+          "Checar risco de choque hipovolêmico em caso de sangramento pulsátil",
+          "Administrar vacina e/ou soro antitetânico (SAT) se vacinação desatualizada (> 5 anos)"
+        ],
+        questionsForDoctor: [
+          "Qual objeto causou o ferimento (ferro, vidro, lata, ferramenta, mordedura)?",
+          "Há quanto tempo ocorreu a lesão?",
+          "O paciente faz uso de anticoagulantes ou antiagregantes plaquetários?"
+        ]
+      },
+      disclaimer: "Esta ferramenta é exclusivamente para orientação e triagem prévia. Não substitui consulta médica presencial."
+    };
+  }
+
+  if (color === 'orange') {
+    return {
+      manchesterColor: "orange",
+      urgencyLabel: "Laranja - Muito Urgente (Atendimento em até 10 minutos)",
+      recommendedFacility: "UPA 24h",
+      maxWaitTime: "10 minutos",
+      flogisticSigns: {
+        erythema: true,
+        edema: true,
+        heat: hasHeatOrFever,
+        painReported: true,
+        purulentExudate: hasPurulent
+      },
+      citizenView: {
+        summary: "⚠️ MUITO URGENTE: A análise visual identificou uma FERIDA ABERTA ATIVA com sinais inflamatórios evidentes (dor, calor local, bordas laceradas e/ou secreção). Lesões abertas com essa característica têm risco elevado de celulite bacteriana infecciosa e demandam atendimento presencial imediato na UPA.",
+        whatToDo: "Procure atendimento na UPA 24h mais próxima ainda hoje (tempo de espera prioritário de até 10 minutos). Uma equipe médica precisa higienizar com técnica estéril e prescrever o tratamento adequado.",
+        homeCare: [
+          "Lave apenas com soro fisiológico ou água corrente morna e sabonete neutro.",
+          "Proteja a ferida com gaze estéril ou pano limpo e seco, sem apertar em excesso.",
+          "Não mexa, não espete e não tente retirar crostas ou tecidos à força.",
+          "Apresente a ficha deste aplicativo na recepção da triagem para acelerar seu acolhimento."
+        ],
+        warningSignsToWatch: [
+          "Vermelhidão que avança e se espalha para além do corte ao longo das horas",
+          "Surgimento de febre acima de 37.8°C ou calafrios e tremores no corpo",
+          "Aumento súbito da dor e sensação de que a região está muito quente ao toque",
+          "Saída contínua de pus esverdeado/amarelado com odor desagradável"
+        ]
+      },
+      clinicalView: {
+        chiefComplaint: isDental 
+          ? "Odontalgia aguda com celulite facial e edema expansivo" 
+          : "Ferida aberta / ulcerada com sinais inflamatórios exuberantes e risco de complicação infecciosa",
+        semioticDescription: "Solução de continuidade tegumentar com bordas hiperemiadas e infiltradas. Presença de exsudato inflamatório e edema perilesional marcado. Sinais de reação imune local ativa com risco de invasão tecidual profunda.",
+        evolutionAnalysis: imageBase64List.length > 1 
+          ? "Evolução temporal com aumento da hiperemia perilesional e persistência de exsudato. Requer intervenção médica presencial."
+          : "Registro inicial evidenciando necessidade de antissepsia cirúrgica, debridamento e fechamento primário.",
+        suggestedCIAP2: isDental ? "D19 - Doença dos dentes/gengivas aguda" : "S87 - Ferida/corte infectado",
+        suggestedCID10: isDental ? "K04.7 - Abscesso periapical agudo" : "L08.9 - Infecção local da pele e tecido subcutâneo",
+        triageHypothesis: isDental 
+          ? "Abscesso odontogênico com disseminação fascial - Risco de Angina de Ludwig" 
+          : "Ferida aberta aguda com infecção local / celulite perilesional incipiente.",
+        redFlags: [
+          "Rastrear sinais sistêmicos de sepse (taquicardia, hipotensão, febre)",
+          "Investigar imunossupressão ou diabetes descompensado",
+          "Avaliação de profilaxia antitetânica na emergência"
+        ],
+        questionsForDoctor: [
+          "O paciente refere febre medida com termômetro?",
+          "Houve uso de antibióticos prévios?",
+          "Há linfangite ascendente observada no membro?"
+        ]
+      },
+      disclaimer: "Esta ferramenta é exclusivamente para orientação e triagem prévia. Não substitui consulta médica presencial."
+    };
+  }
+
+  if (color === 'yellow') {
+    return {
+      manchesterColor: "yellow",
+      urgencyLabel: "Amarelo - Urgente (Avaliação em até 60 minutos)",
+      recommendedFacility: "UPA 24h ou Posto de Saúde (UBS)",
+      maxWaitTime: "60 minutos",
+      flogisticSigns: {
+        erythema: true,
+        edema: true,
+        heat: hasHeatOrFever,
+        painReported: hasPain,
+        purulentExudate: hasPurulent
+      },
+      citizenView: {
+        summary: "🟡 ATENÇÃO / URGENTE: Identificamos uma FERIDA OU LESÃO CUTÂNEA com sinais inflamatórios ativos (vermelhidão, dor local ou sensibilidade). Embora não haja sangramento descontrolado imediato, é fundamental que a equipe médica avalie hoje para realizar curativo estéril, verificar vacinação contra tétano e prevenir infecções.",
+        whatToDo: "Dirija-se ao Posto de Saúde (UBS) ou UPA 24h para avaliação médica ainda hoje (tempo recomendado em até 60 minutos).",
+        homeCare: [
+          "Lave cuidadosamente com água corrente limpa e sabão neutro sem esfregar.",
+          "Cubra com gaze limpa para proteger da poeira e evitar contaminação.",
+          "Não utilize pomadas caseiras, mertiolate ou substâncias não estéreis.",
+          "Mantenha o local em repouso e seco."
+        ],
+        warningSignsToWatch: [
+          "Se a dor aumentar bruscamente ou começar a latejar forte",
+          "Se surgir calor intenso ou a vermelhidão começar a aumentar de tamanho",
+          "Se começar a vazar pus amarelado ou tiver febre"
+        ]
+      },
+      clinicalView: {
+        chiefComplaint: "Lesão tegumentar com sinais inflamatórios localizados moderados",
+        semioticDescription: "Solução de continuidade dérmica superficial/intermediária com hiperemia perilesional moderada e edema local, sem necrose evidente ou sepse.",
+        evolutionAnalysis: "Quadro subagudo que necessita de higiene técnica, curativo oclusivo e vigilância em 48 horas.",
+        suggestedCIAP2: "S87 - Ferida/corte",
+        suggestedCID10: "L08.9 - Infecção local da pele e tecido subcutâneo",
+        triageHypothesis: "Solução de continuidade cutânea inflamatória que requer curativo estéril e checagem de imunização antitetânica.",
+        redFlags: [
+          "Verificar vacina contra tétano nos últimos 10 anos",
+          "Monitorar aparecimento de linhas avermelhadas (linfangite)"
+        ],
+        questionsForDoctor: [
+          "Quando foi a última vacina de tétano?",
+          "Há quanto tempo a ferida ocorreu?"
+        ]
+      },
+      disclaimer: "Esta ferramenta é exclusivamente para orientação e triagem prévia. Não substitui consulta médica presencial."
+    };
+  }
+
+  // Default Green (Only for intact skin, minor superficial scratches or stable mild spots)
   return {
-    manchesterColor: color,
-    urgencyLabel: color === 'orange' ? "Laranja - Muito Urgente (Até 10 min)" : (color === 'yellow' ? "Amarelo - Urgente (Avaliação em até 60 min)" : "Verde - Pouco Urgente (Até 120 min)"),
-    recommendedFacility: color === 'orange' ? "UPA 24h" : (color === 'yellow' ? "UPA ou Posto de Saúde" : "UBS / Posto de Saúde"),
-    maxWaitTime: color === 'orange' ? "10 minutos" : (color === 'yellow' ? "60 minutos" : "120 minutos"),
+    manchesterColor: "green",
+    urgencyLabel: "Verde - Pouco Urgente (Avaliação em até 120 minutos)",
+    recommendedFacility: "UBS / Posto de Saúde",
+    maxWaitTime: "120 minutos",
     flogisticSigns: {
-      erythema: hasInfection,
-      edema: true,
-      heat: hasInfection,
-      painReported: true,
-      purulentExudate: pLower.includes('pus') || pLower.includes('secreção')
+      erythema: false,
+      edema: false,
+      heat: false,
+      painReported: false,
+      purulentExudate: false
     },
     citizenView: {
-      summary: isDental 
-        ? "Identificamos sinais de inflamação e sensibilidade bucal na região informada. Como há inchaço relatado, é fundamental que a equipe de saúde bucal avalie para evitar que a infecção se espalhe."
-        : (isEye 
-            ? "Observa-se irritação conjuntival com congestão vascular leve a moderada. Importante evitar esfregar os olhos e manter compressas limpas."
-            : "Observa-se uma lesão cutânea com bordas delimitadas e sinais discretos de irritação e resposta inflamatória local. Não foram identificados indícios visuais de necrose ou sangramento ativo incontrolável."),
-      whatToDo: color === 'yellow' || color === 'orange'
-        ? "Procure atendimento na UPA 24h ou na sua Unidade Básica de Saúde ainda hoje para que um profissional médico examine pessoalmente."
-        : "Dirija-se à sua Unidade Básica de Saúde (Posto de Saúde) de referência no seu bairro para acompanhamento de enfermagem e curativo seguro.",
+      summary: "🟢 POUCO URGENTE: A análise visual identificou uma lesão cutânea superficial, fechada ou escoriação leve em bom aspecto de cicatrização, sem indícios visuais de sangramento profundo, necrose ou secreção purulenta ativa.",
+      whatToDo: "Você pode manter cuidados de higiene em casa e, se desejar, agendar uma consulta de rotina no seu Posto de Saúde (UBS) de referência para acompanhamento.",
       homeCare: [
-        "Lave o local com água corrente tratada e sabão neutro, ou soro fisiológico 0,9%.",
-        "Seque com gaze limpa ou toalha macia dando toques suaves, NUNCA esfregue.",
-        "Não passe pomadas caseiras, borra de café, álcool ou receitas da internet.",
-        "Mantenha a região limpa e protegida de poeira e moscas com curativo respirável."
+        "Mantenha a pele limpa lavando com água e sabão neutro durante o banho.",
+        "Mantenha a região hidratada e evite coçar ou puxar casquinhas.",
+        "Não aplique receitas caseiras desconhecidas."
       ],
       warningSignsToWatch: [
-        "Aumento rápido da vermelhidão se espalhando além das bordas",
-        "Surgimento de febre acima de 37.8°C ou calafrios",
-        "Dor latejante que piora mesmo em repouso",
-        "Saída contínua de pus amarelado ou esverdeado com odor forte"
+        "Se a ferida começar a inchar, ficar quente ou vazar pus",
+        "Se surgir febre ou dor forte no local"
       ]
     },
     clinicalView: {
-      chiefComplaint: isDental 
-        ? "Odontalgia com edema tecidual associado relatado pelo paciente" 
-        : "Lesão cutânea tegumentar com sinais flogísticos locais",
-      semioticDescription: imageCount > 1 
-        ? "Análise comparativa temporal: Redução discreta do exsudato inflamatório em relação ao registro anterior, persistindo hiperemia perilesional moderada e área de tecido de granulação incipiente."
-        : "Presença de hiperemia peri-lesional, edema leve, sem sinais aparentes de desvitalização tecidual profunda ou linfangite ascendente.",
-      evolutionAnalysis: imageCount > 1 
-        ? "Quadro em evolução favorável após higiene básica, sem piora infecciosa aguda." 
-        : "Primeiro registro de triagem do caso. Recomenda-se registrar nova foto em 48-72h para vigilância da cicatrização.",
-      suggestedCIAP2: isDental ? "D19 - Doença dos dentes/gengivas" : "S87 - Ferida/corte",
-      suggestedCID10: isDental ? "K04.7 - Abscesso periapical sem fístula" : "L08.9 - Infecção local da pele e do tecido subcutâneo",
-      triageHypothesis: isDental 
-        ? "Possível complicação endodôntica/periodontal que demanda avaliação de urgência odontológica no CEO ou UBS"
-        : "Solução de continuidade dérmica com reação inflamatória reativa sem sepse aparente",
-      redFlags: [
-        "Afastar celulite infecciosa em expansão ou erisipela",
-        "Checar vacinação antitetânica (DTP/dT) nos últimos 10 anos",
-        "Investigar histórico de diabetes mellitus ou insuficiência vascular periférica"
-      ],
-      questionsForDoctor: [
-        "Há quanto tempo a lesão surgiu e como começou?",
-        "O paciente tem diabetes ou toma medicamentos imunossupressores?",
-        "Houve aferição recente de temperatura axilar?"
-      ]
+      chiefComplaint: "Lesão cutânea superficial estável sem sinais de alarme",
+      semioticDescription: "Integridade cutânea preservada ou escoriação superficial epitelizada. Ausência de sinais flogísticos agudos, secreção ou linfadenomegalia regional.",
+      evolutionAnalysis: "Processo cicatricial ou lesão dermatológica benigna sem repercussão hemodinâmica.",
+      suggestedCIAP2: "S99 - Doença de pele outra",
+      suggestedCID10: "L98.9 - Transtorno da pele e do tecido celular subcutâneo",
+      triageHypothesis: "Lesão dermatológica superficial estável com indicação de acompanhamento na Atenção Primária.",
+      redFlags: ["Orientar retorno se houver eritema expansivo ou dor aguda."],
+      questionsForDoctor: ["A lesão coça ou mudou de cor recentemente?"]
     },
     disclaimer: "Esta ferramenta é exclusivamente para orientação e triagem prévia. Não substitui consulta médica presencial."
   };

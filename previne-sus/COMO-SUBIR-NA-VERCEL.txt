@@ -1,0 +1,24 @@
+===================================================================
+       COMO SUBIR O PREVINESUS PARA A VERCEL EM 2 MINUTOS
+===================================================================
+
+Voce tem duas formas super faceis:
+
+METODO 1 (O MAIS FACIL - 1 CLIQUE):
+-----------------------------------
+1. Dê 2 cliques no arquivo "subir-para-vercel.bat" nesta pasta.
+2. Ele vai perguntar se deseja fazer login na Vercel (basta apertar Y ou abrir o link que ele der para autorizar com a conta que voce ja esta logado no navegador).
+3. Nas perguntas seguintes (project name, etc.), aperte ENTER para tudo (aceitar o padrao).
+4. Em 1 minuto ele te dá o link oficial (ex: https://previnesus.vercel.app)!
+
+
+METODO 2 (PELO SITE DA VERCEL / GITHUB):
+----------------------------------------
+Se voce estiver no painel da Vercel (vercel.com/new):
+1. A Vercel importa projetos atraves do GitHub ou GitLab.
+2. Basta criar um repositorio no GitHub (github.com/new) com o nome "previnesus".
+3. Enviar os arquivos desta pasta para lá.
+4. Na tela da Vercel, clicar em "Import" ao lado de "previnesus" e clicar em "Deploy".
+
+Pronto! Qualquer pessoa da organizacao de saude podera acessar o link no celular ou computador!
+===================================================================

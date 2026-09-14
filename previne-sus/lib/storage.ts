@@ -115,8 +115,8 @@ export const storage = {
   },
 
   getApiKey: (): string => {
-    if (typeof window === 'undefined') return '';
-    return localStorage.getItem('previnesus_api_key') || '';
+    if (typeof window === 'undefined') return process.env.NEXT_PUBLIC_GEMINI_API_KEY || 'AQ.Ab8RN6IBrbGi-OnjQrPn91Tr7gMEou7NbBN5ORn3gGH0JF0OIQ';
+    return localStorage.getItem('previnesus_api_key') || process.env.NEXT_PUBLIC_GEMINI_API_KEY || 'AQ.Ab8RN6IBrbGi-OnjQrPn91Tr7gMEou7NbBN5ORn3gGH0JF0OIQ';
   },
 
   setApiKey: (key: string) => {

@@ -268,7 +268,7 @@ ${previousImageBase64 ? `NOTA: A segunda imagem anexada é do histórico anterio
                   key={cat.id}
                   type="button"
                   onClick={() => setSelectedCategory(cat.id)}
-                  className={`p-3.5 rounded-2xl border text-left transition-all ${
+                  className={`p-3.5 rounded-2xl border text-left transition-all cursor-pointer active:scale-98 ${
                     selectedCategory === cat.id
                       ? 'bg-sus-blue-light/60 border-sus-blue shadow-sm ring-2 ring-sus-blue/20'
                       : 'bg-white border-neutral-200 hover:border-neutral-300'
@@ -288,23 +288,31 @@ ${previousImageBase64 ? `NOTA: A segunda imagem anexada é do histórico anterio
               <label className="text-xs font-bold text-neutral-700 uppercase tracking-wider">
                 2. Foto da região afetada
               </label>
-              {/* Sample loader */}
+              {/* Quick Sample Loaders */}
               <div className="flex items-center gap-1.5 text-[11px] text-neutral-500">
-                <span>Testar com:</span>
+                <span>Testar exemplo:</span>
                 <button
                   type="button"
                   onClick={() => loadSampleImage('ferida')}
-                  className="font-bold text-sus-blue hover:underline"
+                  className="font-bold text-sus-blue hover:underline cursor-pointer"
                 >
-                  Ferida
+                  🩹 Ferida
+                </button>
+                •
+                <button
+                  type="button"
+                  onClick={() => loadSampleImage('pele')}
+                  className="font-bold text-sus-blue hover:underline cursor-pointer"
+                >
+                  🔍 Pele
                 </button>
                 •
                 <button
                   type="button"
                   onClick={() => loadSampleImage('odonto')}
-                  className="font-bold text-sus-blue hover:underline"
+                  className="font-bold text-sus-blue hover:underline cursor-pointer"
                 >
-                  Odonto
+                  🦷 Dente
                 </button>
               </div>
             </div>
@@ -317,42 +325,55 @@ ${previousImageBase64 ? `NOTA: A segunda imagem anexada é do histórico anterio
                     alt="Foto capturada"
                     className="w-full h-full object-contain"
                   />
-                  <button
-                    type="button"
-                    onClick={() => setImageBase64(null)}
-                    className="absolute top-3 right-3 px-3 py-1.5 rounded-full bg-black/70 hover:bg-black text-white text-xs font-bold backdrop-blur-md transition-colors"
-                  >
-                    Trocar Foto
-                  </button>
+                  <div className="absolute top-3 right-3 flex items-center gap-2">
+                    <label
+                      htmlFor="photo-file-input"
+                      className="px-3 py-1.5 rounded-full bg-sus-blue hover:bg-sus-blue-dark text-white text-xs font-bold shadow-md cursor-pointer transition-colors flex items-center gap-1"
+                    >
+                      <Camera className="w-3.5 h-3.5" />
+                      <span>Substituir</span>
+                    </label>
+                    <button
+                      type="button"
+                      onClick={() => setImageBase64(null)}
+                      className="px-3 py-1.5 rounded-full bg-black/70 hover:bg-black text-white text-xs font-bold backdrop-blur-md transition-colors cursor-pointer"
+                    >
+                      Remover
+                    </button>
+                  </div>
                 </div>
               ) : (
-                <div
-                  onClick={() => fileInputRef.current?.click()}
-                  className="cursor-pointer border-2 border-dashed border-neutral-300 hover:border-sus-blue rounded-3xl p-6 sm:p-8 bg-white hover:bg-neutral-50 transition-all text-center flex flex-col items-center justify-center gap-3"
+                <label
+                  htmlFor="photo-file-input"
+                  className="cursor-pointer border-2 border-dashed border-neutral-300 hover:border-sus-blue rounded-3xl p-6 sm:p-8 bg-white hover:bg-neutral-50 transition-all text-center flex flex-col items-center justify-center gap-3 block"
                 >
-                  <div className="w-14 h-14 rounded-2xl bg-sus-blue-light text-sus-blue flex items-center justify-center shadow-inner">
+                  <div className="w-14 h-14 rounded-2xl bg-sus-blue-light text-sus-blue flex items-center justify-center shadow-inner mx-auto">
                     <Camera className="w-7 h-7" />
                   </div>
                   <div>
-                    <span className="text-sm font-bold text-neutral-900 block">
-                      Tirar foto com o celular ou enviar imagem
+                    <span className="text-sm sm:text-base font-black text-neutral-900 block">
+                      Clique aqui para Adicionar ou Tirar a Foto
                     </span>
                     <p className="text-xs text-neutral-500 mt-1">
-                      Foque bem a câmera em ambiente iluminado para uma boa análise
+                      Você pode tirar uma foto agora pelo celular ou escolher um arquivo da sua galeria/computador
                     </p>
                   </div>
-                  <span className="px-4 py-2 rounded-xl bg-sus-blue text-white text-xs font-bold shadow-sm shadow-sus-blue/20">
-                    Abrir Câmera / Galeria
-                  </span>
-                </div>
+                  <div className="flex flex-wrap items-center justify-center gap-2 mt-1">
+                    <span className="px-5 py-2.5 rounded-xl bg-sus-blue text-white text-xs font-bold shadow-md shadow-sus-blue/25 hover:bg-sus-blue-dark transition-colors inline-flex items-center gap-1.5">
+                      <Camera className="w-4 h-4" />
+                      <span>Abrir Câmera / Galeria de Fotos</span>
+                    </span>
+                  </div>
+                </label>
               )}
               <input
+                id="photo-file-input"
                 ref={fileInputRef}
                 type="file"
                 accept="image/*"
                 capture="environment"
                 onChange={handleImageUpload}
-                className="hidden"
+                className="sr-only"
               />
             </div>
           </div>
@@ -471,7 +492,16 @@ ${previousImageBase64 ? `NOTA: A segunda imagem anexada é do histórico anterio
       ) : (
         /* Results View */
         <div className="space-y-6">
-          <div className="flex items-center justify-between">
+          {/* Top Reset Banner */}
+          <div className="p-4 rounded-3xl bg-sus-blue-light/70 border-2 border-sus-blue/40 flex flex-col sm:flex-row items-center justify-between gap-3 shadow-sm">
+            <div>
+              <span className="text-xs font-black text-sus-blue-dark block">
+                Triagem Concluída
+              </span>
+              <p className="text-[11px] text-neutral-600">
+                Você pode conferir as orientações abaixo ou clicar para testar outra foto.
+              </p>
+            </div>
             <button
               type="button"
               onClick={() => {
@@ -479,12 +509,11 @@ ${previousImageBase64 ? `NOTA: A segunda imagem anexada é do histórico anterio
                 setImageBase64(null);
                 setUserNotes('');
               }}
-              className="inline-flex items-center gap-1.5 text-xs font-bold text-sus-blue hover:underline"
+              className="w-full sm:w-auto px-5 py-2.5 rounded-xl bg-sus-blue hover:bg-sus-blue-dark text-white font-black text-xs shadow-md transition-all flex items-center justify-center gap-1.5 cursor-pointer active:scale-95"
             >
-              <ArrowLeft className="w-4 h-4" />
-              <span>Fazer Nova Avaliação</span>
+              <RefreshCw className="w-3.5 h-3.5" />
+              <span>Tirar Outra Foto / Nova Análise</span>
             </button>
-            <span className="text-xs text-neutral-500 font-medium">Protocolo gerado com sucesso</span>
           </div>
 
           {/* Dual View Report Sheet */}
@@ -493,6 +522,22 @@ ${previousImageBase64 ? `NOTA: A segunda imagem anexada é do histórico anterio
             category={CATEGORIES.find(c => c.id === selectedCategory)?.label || 'Lesão Cutânea'}
             photoUrl={imageBase64 || undefined}
           />
+
+          {/* Bottom Action Button */}
+          <div className="pt-2 text-center">
+            <button
+              type="button"
+              onClick={() => {
+                setTriageResult(null);
+                setImageBase64(null);
+                setUserNotes('');
+              }}
+              className="w-full sm:w-auto px-8 py-3.5 rounded-2xl bg-neutral-900 hover:bg-black text-white font-black text-xs sm:text-sm shadow-md transition-all inline-flex items-center justify-center gap-2 cursor-pointer active:scale-98"
+            >
+              <ArrowLeft className="w-4 h-4" />
+              <span>Voltar e Analisar Outro Machucado ou Foto</span>
+            </button>
+          </div>
         </div>
       )}
 

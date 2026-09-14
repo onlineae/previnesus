@@ -34,8 +34,13 @@ export default function MedicalReportSheet({
     }, 250);
   };
 
-  const c = triageData?.citizenView || {};
-  const m = triageData?.clinicalView || {};
+  const c = triageData?.citizenView || (triageData?.citizenGuidance ? {
+    summary: triageData.citizenGuidance.directMessage,
+    whatToDo: triageData.citizenGuidance.hydrationPlan,
+    homeCare: [],
+    warningSignsToWatch: triageData.citizenGuidance.threeWarningSigns || []
+  } : {});
+  const m = triageData?.clinicalView || triageData?.clinicalTriageSummary || {};
   const signs = triageData?.flogisticSigns || {};
   const color = triageData?.manchesterColor || 'green';
 

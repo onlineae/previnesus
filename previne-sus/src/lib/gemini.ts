@@ -120,6 +120,8 @@ export async function analyzeImagePixels(imgDataUrl?: string): Promise<ImageVisi
   });
 }
 
+export const DEFAULT_GEMINI_API_KEY = 'AQ.Ab8RN6IBrbGi-OnjQrPn91Tr7gMEou7NbBN5ORn3gGH0JF0OIQ';
+
 export async function callGeminiVision(
   systemPrompt: string,
   userPrompt: string,
@@ -127,73 +129,77 @@ export async function callGeminiVision(
   apiKey?: string,
   providedMetrics?: ImageVisionMetrics
 ): Promise<any> {
-  const key = apiKey || process.env.GEMINI_API_KEY || process.env.NEXT_PUBLIC_GEMINI_API_KEY;
+  const key = apiKey || process.env.GEMINI_API_KEY || process.env.NEXT_PUBLIC_GEMINI_API_KEY || DEFAULT_GEMINI_API_KEY;
 
   if (key) {
-    try {
-      const parts: any[] = [{ text: `${systemPrompt}\n\nInstruções da Entrada:\n${userPrompt}` }];
+    const candidateModels = ['gemini-3.6-flash', 'gemini-flash-latest', 'gemini-3.7-flash'];
 
-      for (const img of imageBase64List) {
-        if (!img || typeof img !== 'string') continue;
-        const match = img.match(/^data:(image\/[a-zA-Z+]+);base64,(.+)$/);
-        if (match) {
-          parts.push({
-            inlineData: {
-              mimeType: match[1],
-              data: match[2]
-            }
-          });
-        }
-      }
+    const parts: any[] = [{ text: `${systemPrompt}\n\nInstruções da Entrada:\n${userPrompt}` }];
 
-      const response = await fetch(
-        `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${key}`,
-        {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            contents: [{ parts }],
-            generationConfig: {
-              responseMimeType: "application/json",
-              temperature: 0.2
-            }
-          })
-        }
-      );
-
-      if (response.ok) {
-        const data = await response.json();
-        const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
-        if (text) {
-          const parsed = JSON.parse(text);
-          const m = providedMetrics;
-          if (m && (m.deepWoundRatio > 0.008 || m.necroticRatio > 0.008)) {
-            parsed.manchesterColor = 'red';
-            parsed.urgencyLabel = 'Vermelho - Emergência (Atendimento Imediato)';
-            parsed.recommendedFacility = 'UPA 24h ou SAMU 192';
-            parsed.maxWaitTime = '0 minutos (Atendimento Imediato)';
-          } else if (m && (m.deepWoundRatio > 0.0015 || m.purulentRatio > 0.005)) {
-            if (parsed.manchesterColor === 'green' || parsed.manchesterColor === 'blue') {
-              parsed.manchesterColor = 'orange';
-              parsed.urgencyLabel = 'Laranja - Muito Urgente (Atendimento em até 10 minutos)';
-              parsed.recommendedFacility = 'UPA 24h';
-              parsed.maxWaitTime = '10 minutos';
-            }
-          } else if (m && (m.deepWoundRatio > 0.0002 || m.erythemaRatio > 0.025)) {
-            if (parsed.manchesterColor === 'green' || parsed.manchesterColor === 'blue') {
-              parsed.manchesterColor = 'yellow';
-              parsed.urgencyLabel = 'Amarelo - Urgente (Avaliação em até 60 minutos)';
-              parsed.recommendedFacility = 'UPA 24h ou Posto de Saúde (UBS)';
-              parsed.maxWaitTime = '60 minutos';
-            }
+    for (const img of imageBase64List) {
+      if (!img || typeof img !== 'string') continue;
+      const match = img.match(/^data:(image\/[a-zA-Z+]+);base64,(.+)$/);
+      if (match) {
+        parts.push({
+          inlineData: {
+            mimeType: match[1],
+            data: match[2]
           }
-          return parsed;
-        }
-      } else {
-        console.warn('Gemini API call returned non-200 status:', response.status);
+        });
       }
-    } catch (e) {
-      console.warn('Error connecting to Gemini API, falling back to clinical engine', e);
+    }
+
+    for (const model of candidateModels) {
+      try {
+        const response = await fetch(
+          `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${key}`,
+          {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              contents: [{ parts }],
+              generationConfig: {
+                responseMimeType: "application/json",
+                temperature: 0.1
+              }
+            })
+          }
+        );
+
+        if (response.ok) {
+          const data = await response.json();
+          const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
+          if (text) {
+            const parsed = JSON.parse(text);
+            const m = providedMetrics;
+            if (m && (m.deepWoundRatio > 0.008 || m.necroticRatio > 0.008)) {
+              parsed.manchesterColor = 'red';
+              parsed.urgencyLabel = 'Vermelho - Emergência (Atendimento Imediato)';
+              parsed.recommendedFacility = 'UPA 24h ou SAMU 192';
+              parsed.maxWaitTime = '0 minutos (Atendimento Imediato)';
+            } else if (m && (m.deepWoundRatio > 0.0015 || m.purulentRatio > 0.005)) {
+              if (parsed.manchesterColor === 'green' || parsed.manchesterColor === 'blue') {
+                parsed.manchesterColor = 'orange';
+                parsed.urgencyLabel = 'Laranja - Muito Urgente (Atendimento em até 10 minutos)';
+                parsed.recommendedFacility = 'UPA 24h';
+                parsed.maxWaitTime = '10 minutos';
+              }
+            } else if (m && (m.deepWoundRatio > 0.0002 || m.erythemaRatio > 0.025)) {
+              if (parsed.manchesterColor === 'green' || parsed.manchesterColor === 'blue') {
+                parsed.manchesterColor = 'yellow';
+                parsed.urgencyLabel = 'Amarelo - Urgente (Avaliação em até 60 minutos)';
+                parsed.recommendedFacility = 'UPA 24h ou Posto de Saúde (UBS)';
+                parsed.maxWaitTime = '60 minutos';
+              }
+            }
+            return parsed;
+          }
+        } else {
+          console.warn(`Gemini API model ${model} returned status: ${response.status}. Trying next candidate model...`);
+        }
+      } catch (e) {
+        console.warn(`Error connecting to Gemini API model ${model}:`, e);
+      }
     }
   }
 
@@ -303,35 +309,56 @@ async function simulateClinicalResponse(
     };
   }
 
-  // 3. Symptoms check (Dengue / Respiratory)
-  if (pLower.includes('dengue') || pLower.includes('febre') || pLower.includes('falta de ar')) {
+  // 3. Symptoms check (Only for non-image Arbovirus / Dengue triage questionnaire)
+  const isImageTriage = imageBase64List.length > 0 || 
+    pLower.includes('categoria da queixa: ferida') || 
+    pLower.includes('categoria da queixa: pele') || 
+    pLower.includes('categoria da queixa: odonto') || 
+    pLower.includes('categoria da queixa: olhos') ||
+    pLower.includes('machucad') ||
+    pLower.includes('corte') ||
+    pLower.includes('abert') ||
+    pLower.includes('úlcera') ||
+    pLower.includes('ulcera') ||
+    pLower.includes('rachadura');
+
+  if (!isImageTriage && (pLower.includes('queixa: dengue') || pLower.includes('suspeita de dengue') || (pLower.includes('dengue') && !pLower.includes('categoria da queixa')))) {
     const hasAlarm = pLower.includes('dor abdominal') || pLower.includes('vômito') || pLower.includes('sangramento') || pLower.includes('falta de ar');
     
     if (hasAlarm) {
       return {
         manchesterColor: "orange",
         urgencyTitle: "Laranja - Muito Urgente (Sinal de Alarme)",
+        urgencyLabel: "Laranja - Muito Urgente (Sinal de Alarme)",
         susAction: "UPA IMEDIATA",
         susFacility: "UPA 24h",
+        recommendedFacility: "UPA 24h",
+        maxWaitTime: "10 minutos",
         suspicion: "Suspeita de Dengue com Sinais de Alarme (Grupo C) ou Descompensação Aguda",
         redFlagDetected: true,
         alarmSignsFound: [
           "Presença de dor abdominal persistente ou vômitos ou alteração hemodinâmica relatada",
           "Risco de extravasamento plasmático e desidratação súbita"
         ],
-        citizenGuidance: {
-          directMessage: "ATENÇÃO: Você informou sinais que exigem avaliação médica imediata. Não permaneça em casa esperando o dia passar.",
-          hydrationPlan: "Inicie hidratação imediatamente enquanto se desloca para o posto ou UPA (água, água de coco ou soro oral).",
-          threeWarningSigns: [
+        citizenView: {
+          summary: "ATENÇÃO: Você informou sinais de alarme que exigem avaliação médica imediata. Não permaneça em casa esperando o dia passar.",
+          whatToDo: "Inicie hidratação imediatamente enquanto se desloca para a UPA 24h (água, água de coco ou soro oral).",
+          homeCare: ["Repouso absoluto", "Hidratação oral rigorosa (2 a 3 litros de líquidos)", "Não tome anti-inflamatórios como AAS ou Ibuprofeno"],
+          warningSignsToWatch: [
             "Tontura forte ou sensação de desmaio ao ficar de pé",
             "Dor de barriga forte que não alivia",
             "Vômitos repetidos que impedem você de tomar água"
           ]
         },
-        clinicalTriageSummary: {
-          ciap2: "A77 - Dengue com Sinais de Alarme",
-          cid10: "A97.1 - Dengue com sinais de alarme",
-          clinicalObservation: "Paciente refere síndrome febril com queixas compatíveis com sinais de alarme do Ministério da Saúde. Necessita prova do laço, aferição de PA deitado/em pé e hemograma com hematócrito urgente."
+        clinicalView: {
+          chiefComplaint: "Síndrome febril aguda com sinais de alarme / suspeita de arbovirose",
+          semioticDescription: "Paciente refere síndrome febril com queixas compatíveis com sinais de alarme do Ministério da Saúde. Necessita prova do laço, aferição de PA deitado/em pé e hemograma com hematócrito urgente.",
+          evolutionAnalysis: "Risco de extravasamento capilar nas próximas 24-48 horas.",
+          suggestedCIAP2: "A77 - Dengue com Sinais de Alarme",
+          suggestedCID10: "A97.1 - Dengue com sinais de alarme",
+          triageHypothesis: "Suspeita de Dengue grupo C com indicação de hidratação venosa imediata.",
+          redFlags: ["Queda abrupta de plaquetas", "Hematócrito elevado", "Hipotensão postural"],
+          questionsForDoctor: ["Quantos dias de febre?", "Houve sangramento espontâneo?"]
         },
         disclaimer: "Esta ferramenta é exclusivamente para orientação e triagem prévia. Não substitui consulta médica presencial."
       };
@@ -339,24 +366,37 @@ async function simulateClinicalResponse(
       return {
         manchesterColor: "green",
         urgencyTitle: "Verde - Pouco Urgente (Acompanhamento Domiciliar Guiado)",
+        urgencyLabel: "Verde - Pouco Urgente (Acompanhamento Domiciliar Guiado)",
         susAction: "CUIDADOS EM CASA + VIGILÂNCIA",
         susFacility: "UBS / Posto de Saúde",
+        recommendedFacility: "UBS / Posto de Saúde",
+        maxWaitTime: "120 minutos",
         suspicion: "Síndrome Febril Aguda sem Sinais de Alarme no Momento (Grupo A)",
         redFlagDetected: false,
         alarmSignsFound: [],
-        citizenGuidance: {
-          directMessage: "Seus sintomas não mostram sinais imediatos de perigo neste momento. O segredo principal para recuperação de viroses é hidratação abundante.",
-          hydrationPlan: "Tome pelo menos 2 a 3 litros de líquidos por dia: água, soro caseiro, água de coco e chás claros.",
-          threeWarningSigns: [
+        citizenView: {
+          summary: "Seus sintomas não mostram sinais imediatos de alarme no momento. O segredo principal para recuperação de viroses é hidratação abundante.",
+          whatToDo: "Tome pelo menos 2 a 3 litros de líquidos por dia (água, soro caseiro, água de coco) e procure a UBS de referência.",
+          homeCare: [
+            "Tome pelo menos 2 a 3 litros de líquidos por dia: água, soro caseiro, água de coco e chás claros.",
+            "Repouso e alimentação leve.",
+            "Evite automedicação com anti-inflamatórios."
+          ],
+          warningSignsToWatch: [
             "Dor na barriga contínua ou vômitos que não passam",
             "Sangramento no nariz, na gengiva ou fezes pretas",
             "Tontura intensa ao levantar ou sonolência excessiva"
           ]
         },
-        clinicalTriageSummary: {
-          ciap2: "A77 - Febre / Dengue suspeita grupo A",
-          cid10: "A90 - Febre da Dengue",
-          clinicalObservation: "Quadro febril sem hipotensão, sem sangramento e sem sinais de alarme. Orientada hidratação oral precoce (60 ml/kg/dia) e retorno imediato à UPA se surgirem sinais de alarme."
+        clinicalView: {
+          chiefComplaint: "Síndrome febril sem sinais de gravidade",
+          semioticDescription: "Quadro febril sem hipotensão, sem sangramento e sem sinais de alarme. Orientada hidratação oral precoce (60 ml/kg/dia) e retorno imediato à UPA se surgirem sinais de alarme.",
+          evolutionAnalysis: "Vigilância ativa ambulatorial na Atenção Primária à Saúde.",
+          suggestedCIAP2: "A77 - Febre / Dengue suspeita grupo A",
+          suggestedCID10: "A90 - Febre da Dengue",
+          triageHypothesis: "Síndrome febril aguda Grupo A - Conduta ambulatorial e hidratação.",
+          redFlags: ["Aparecimento de dor abdominal intensa", "Vômitos incoercíveis"],
+          questionsForDoctor: ["Houve casos confirmados de dengue no domicílio?"]
         },
         disclaimer: "Esta ferramenta é exclusivamente para orientação e triagem prévia. Não substitui consulta médica presencial."
       };
@@ -365,7 +405,17 @@ async function simulateClinicalResponse(
 
   // 4. ADVANCED COMPUTER VISION & CLINICAL TRIAGE ENGINE
   // Analyzes image pixels + clinical complaints to determine actual severity
-  const metrics = providedMetrics || await analyzeImagePixels(imageBase64List[0]);
+  const metrics = providedMetrics || await analyzeImagePixels(imageBase64List[0]) || {
+    deepWoundRatio: 0,
+    erythemaRatio: 0,
+    purulentRatio: 0,
+    necroticRatio: 0,
+    edgeContrastRatio: 0,
+  };
+
+  const isDiabeticLesion = 
+    pLower.includes('diabet') || 
+    pLower.includes('rachadura');
 
   const isWound = 
     pLower.includes('ferida') || 
@@ -376,58 +426,83 @@ async function simulateClinicalResponse(
     pLower.includes('sangue') || 
     pLower.includes('sangrando') || 
     pLower.includes('abert') || 
+    pLower.includes('braço') || 
+    pLower.includes('braco') || 
+    pLower.includes('perna') || 
     pLower.includes('queixa: ferida') ||
+    isDiabeticLesion ||
     metrics.deepWoundRatio > 0.0005 ||
     metrics.edgeContrastRatio > 0.008;
+
+  const isSkinAlteration = 
+    pLower.includes('mancha') || 
+    pLower.includes('alteraç') || 
+    pLower.includes('alterac') || 
+    pLower.includes('pinta') || 
+    pLower.includes('queixa: pele');
+
   const isDental = pLower.includes('dente') || pLower.includes('boca') || pLower.includes('gengiva') || pLower.includes('inchaço') || pLower.includes('queixa: odonto');
   const isEye = pLower.includes('olho') || pLower.includes('visão') || pLower.includes('conjuntivite') || pLower.includes('queixa: olhos');
 
   const hasPain = pLower.includes('dor local: sim') || pLower.includes('dor local relatada: sim') || pLower.includes('dor') || pLower.includes('latej');
-  const hasHeatOrFever = pLower.includes('calor/febre: sim') || pLower.includes('sensação de calor/febre: sim') || pLower.includes('febre') || pLower.includes('quente');
+  const hasHeatOrFever = pLower.includes('calor/febre: sim') || pLower.includes('sensação de calor/febre: sim') || pLower.includes('quente');
   const hasPurulent = pLower.includes('pus ou secreção: sim') || pLower.includes('pus') || pLower.includes('secreção') || metrics.purulentRatio > 0.006;
 
   // Severe Open Wound / Critical Emergency (Vermelho) Indicators:
-  // - Significant blood / deep flesh pixels (> 1%)
+  // - Open bleeding laceration / deep wound (> 0.8% of image)
+  // - Laceration edges with blood disparity (> 0.3% blood + sharp edge disparity)
   // - Necrotic tissue (> 0.8%)
-  // - Sharp laceration edges with deep blood
-  // - Explicit text keywords indicating deep wound, severe trauma, or hemorrhage
+  // - Deep wound with purulent slough
+  // - Explicit text keywords: "braço aberto", "aberto", "fundo", "sangrando muito", "hemorragia"
+  // - Diabetic fissure with active infection, tissue loss or purulent secretion
   const isSevereWound = 
     metrics.deepWoundRatio > 0.008 ||
-    (metrics.deepWoundRatio > 0.004 && metrics.edgeContrastRatio > 0.02) ||
+    (metrics.deepWoundRatio > 0.003 && metrics.edgeContrastRatio > 0.01) ||
     metrics.necroticRatio > 0.008 ||
+    (metrics.deepWoundRatio > 0.004 && metrics.purulentRatio > 0.005) ||
+    pLower.includes('braço aberto') ||
+    pLower.includes('braco aberto') ||
     pLower.includes('muito aberta') ||
     pLower.includes('muito fundo') ||
     pLower.includes('sangrando muito') ||
+    pLower.includes('sangrando') ||
     pLower.includes('hemorragia') ||
     pLower.includes('corte fundo') ||
     pLower.includes('osso') ||
-    pLower.includes('gordura');
+    pLower.includes('gordura') ||
+    (pLower.includes('abert') && (hasPain || isWound)) ||
+    (isDiabeticLesion && (hasPurulent || metrics.necroticRatio > 0.005 || metrics.deepWoundRatio > 0.003));
 
   // Very Urgent (Laranja) Indicators:
-  // - Open wound / laceration detected by vision (> 0.2%)
+  // - Open wound / laceration detected by vision (> 0.15%)
   // - Purulent exudate detected (bacterial infection)
-  // - Spreading erythema / cellulitis (> 10%)
+  // - Diabetic foot fissures / rachaduras
+  // - Spreading erythema / cellulitis (> 6%)
   // - Category 'ferida' with reported pain, heat or visible open tissue
   // - Dental condition with severe swelling/fever
   const isVeryUrgent = 
     isSevereWound ||
     metrics.deepWoundRatio > 0.0015 ||
-    metrics.edgeContrastRatio > 0.02 ||
+    metrics.edgeContrastRatio > 0.015 ||
     hasPurulent ||
-    metrics.erythemaRatio > 0.08 ||
-    (isWound && (hasPain || hasHeatOrFever || metrics.deepWoundRatio > 0.0004)) ||
+    isDiabeticLesion ||
+    metrics.erythemaRatio > 0.06 ||
+    (isWound && (hasPain || hasHeatOrFever || metrics.deepWoundRatio > 0.0003)) ||
     (isDental && (hasHeatOrFever || pLower.includes('inchaço')));
 
   // Urgent (Amarelo) Indicators:
   // - Any open wound category (an open cut or ulcer is ALWAYS at least Yellow in Manchester, never Green)
-  // - Mild erythema (> 3%)
+  // - Diabetic skin alteration
+  // - Suspicious skin spots / alterações de pele
+  // - Mild erythema (> 2%)
   // - Reported pain
   // - Any dental or eye complaint
   const isUrgent = 
     isVeryUrgent ||
     isWound ||
-    metrics.deepWoundRatio > 0.0002 ||
-    metrics.erythemaRatio > 0.025 ||
+    isSkinAlteration ||
+    metrics.deepWoundRatio > 0.0001 ||
+    metrics.erythemaRatio > 0.02 ||
     hasPain ||
     isDental ||
     isEye;

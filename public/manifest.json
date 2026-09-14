@@ -1,0 +1,22 @@
+{
+  "short_name": "PrevineSUS",
+  "name": "PrevineSUS - Triagem Médica e Orientação do Cidadão",
+  "description": "Pré-triagem preventiva guiada por visão computacional, tradutor de receitas e laudos com padrão do SUS.",
+  "icons": [
+    {
+      "src": "/icons/icon-192.png",
+      "type": "image/png",
+      "sizes": "192x192"
+    },
+    {
+      "src": "/icons/icon-512.png",
+      "type": "image/png",
+      "sizes": "512x512"
+    }
+  ],
+  "start_url": "/",
+  "background_color": "#005DAA",
+  "theme_color": "#00843D",
+  "display": "standalone",
+  "orientation": "portrait"
+}

@@ -115,13 +115,39 @@ export const storage = {
   },
 
   getApiKey: (): string => {
-    if (typeof window === 'undefined') return process.env.NEXT_PUBLIC_GEMINI_API_KEY || 'AQ.Ab8RN6IBrbGi-OnjQrPn91Tr7gMEou7NbBN5ORn3gGH0JF0OIQ';
-    return localStorage.getItem('previnesus_api_key') || process.env.NEXT_PUBLIC_GEMINI_API_KEY || 'AQ.Ab8RN6IBrbGi-OnjQrPn91Tr7gMEou7NbBN5ORn3gGH0JF0OIQ';
+    if (typeof window === 'undefined') return process.env.NEXT_PUBLIC_GEMINI_API_KEY || 'AQ.Ab8RN6LvjacsFU8rphPFPLx_x2ziA3yDDzr1ultsL1ERS7K5eA';
+    return localStorage.getItem('previnesus_api_key') || process.env.NEXT_PUBLIC_GEMINI_API_KEY || 'AQ.Ab8RN6LvjacsFU8rphPFPLx_x2ziA3yDDzr1ultsL1ERS7K5eA';
   },
 
   setApiKey: (key: string) => {
     if (typeof window !== 'undefined') {
       localStorage.setItem('previnesus_api_key', key);
+    }
+  },
+
+  deleteCase: (caseId: string) => {
+    if (typeof window === 'undefined') return;
+    const cases = storage.getCases().filter(c => c.id !== caseId);
+    storage.saveCases(cases);
+  },
+
+  clearCases: () => {
+    if (typeof window === 'undefined') return;
+    try {
+      localStorage.removeItem(STORAGE_KEYS.CASES);
+    } catch (e) {
+      console.error('Failed to clear cases', e);
+    }
+  },
+
+  clearAll: () => {
+    if (typeof window === 'undefined') return;
+    try {
+      localStorage.removeItem(STORAGE_KEYS.CASES);
+      localStorage.removeItem(STORAGE_KEYS.VITALS);
+      localStorage.removeItem(STORAGE_KEYS.PRESCRIPTIONS);
+    } catch (e) {
+      console.error('Failed to clear storage', e);
     }
   }
 };

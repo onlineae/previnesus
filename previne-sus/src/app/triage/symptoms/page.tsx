@@ -47,27 +47,7 @@ export default function SymptomsTriagePage() {
   const [result, setResult] = useState<any>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
-  const loadSample = (type: 'dengue_alarme' | 'virose_leve') => {
-    if (type === 'dengue_alarme') {
-      setFeverDays('4');
-      setFeverTemp('38.8');
-      setRetroOrbitalPain(true);
-      setBodyAches(true);
-      setSevereAbdominalPain(true);
-      setPersistentVomiting(true);
-      setDizzinessPostural(true);
-      setNotes('Febre começou há 4 dias e hoje comecei a sentir dor na barriga muito forte e vômito que não para.');
-    } else {
-      setFeverDays('2');
-      setFeverTemp('37.9');
-      setRetroOrbitalPain(true);
-      setBodyAches(true);
-      setSevereAbdominalPain(false);
-      setPersistentVomiting(false);
-      setDizzinessPostural(false);
-      setNotes('Corpo mole, dor nas juntas e dor de cabeça leve. Tomando bastante água.');
-    }
-  };
+
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -175,23 +155,56 @@ Avaliação Sintomática Pré-UPA:
 
       {!result ? (
         <form onSubmit={handleSubmit} className="space-y-6">
-          {/* Quick samples bar */}
-          <div className="flex items-center justify-between p-3 rounded-2xl bg-amber-50 border border-amber-200 text-xs">
-            <span className="font-semibold text-amber-900">Testar cenários clínicos:</span>
-            <div className="flex items-center gap-2">
+
+          {/* Quick 1-Click Clinical Presets */}
+          <div className="p-3.5 rounded-2xl bg-gradient-to-r from-blue-50/70 via-white to-amber-50/70 border border-neutral-200 space-y-2">
+            <span className="text-[11px] font-black uppercase tracking-wider text-neutral-700 flex items-center gap-1.5">
+              <Sparkles className="w-3.5 h-3.5 text-sus-blue" />
+              Casos Clínicos para Teste de Sintomas (1 Clique):
+            </span>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
               <button
                 type="button"
-                onClick={() => loadSample('virose_leve')}
-                className="px-2.5 py-1 rounded-lg bg-emerald-600 text-white font-bold text-[11px]"
+                onClick={() => {
+                  setFeverDays('1');
+                  setFeverTemp('37.8');
+                  setRetroOrbitalPain(false);
+                  setBodyAches(true);
+                  setRedSpots(false);
+                  setSevereAbdominalPain(false);
+                  setPersistentVomiting(false);
+                  setDizzinessPostural(false);
+                  setBleeding(false);
+                  setDyspnea(false);
+                  setCough(false);
+                  setNotes('Começou hoje com dor leve no corpo e febre baixa de 37.8°C. Estou comendo e bebendo água normalmente.');
+                }}
+                className="p-3 rounded-xl bg-white hover:bg-emerald-50 border border-neutral-200 hover:border-emerald-300 text-left transition-all cursor-pointer shadow-sm"
               >
-                Virose Leve
+                <span className="text-xs font-bold text-emerald-800 block">🟢 Caso Leve: Febre Baixa Inicial</span>
+                <span className="text-[10px] text-neutral-500 block mt-0.5">Sem sinais de alarme. Cuidados em casa e hidratação.</span>
               </button>
+
               <button
                 type="button"
-                onClick={() => loadSample('dengue_alarme')}
-                className="px-2.5 py-1 rounded-lg bg-red-600 text-white font-bold text-[11px]"
+                onClick={() => {
+                  setFeverDays('4');
+                  setFeverTemp('39.2');
+                  setRetroOrbitalPain(true);
+                  setBodyAches(true);
+                  setRedSpots(true);
+                  setSevereAbdominalPain(true);
+                  setPersistentVomiting(true);
+                  setDizzinessPostural(true);
+                  setBleeding(true);
+                  setDyspnea(false);
+                  setCough(false);
+                  setNotes('Suspeita de Dengue há 4 dias. Hoje comecei com dor forte na barriga, sangramento na gengiva ao escovar e vômitos repetidos.');
+                }}
+                className="p-3 rounded-xl bg-white hover:bg-rose-50 border border-neutral-200 hover:border-rose-300 text-left transition-all cursor-pointer shadow-sm"
               >
-                Alarme UPA
+                <span className="text-xs font-bold text-rose-800 block">🔴 Caso Grave: Dengue com Sinais de Alarme</span>
+                <span className="text-[10px] text-neutral-500 block mt-0.5">Dor abdominal intensa e sangramento. Exige UPA 24h imediata!</span>
               </button>
             </div>
           </div>
@@ -429,6 +442,50 @@ Avaliação Sintomática Pré-UPA:
               <span>Refazer Questionário</span>
             </button>
             <span className="text-xs text-neutral-500 font-medium">Classificação Concluída</span>
+          </div>
+
+          {/* Card de Decisão SUS: DEVE IR À UPA? */}
+          <div className={`p-5 sm:p-6 rounded-3xl border-2 shadow-md ${
+            result.manchesterColor === 'red' || result.manchesterColor === 'orange' || result.redFlagDetected
+              ? 'bg-rose-50 border-rose-500 text-rose-950'
+              : result.manchesterColor === 'yellow'
+              ? 'bg-amber-50 border-amber-500 text-amber-950'
+              : 'bg-emerald-50 border-emerald-500 text-emerald-950'
+          }`}>
+            <div className="flex items-center justify-between flex-wrap gap-2 mb-3">
+              <span className={`px-3.5 py-1.5 rounded-full text-xs font-black uppercase tracking-wider shadow-sm ${
+                result.manchesterColor === 'red' || result.manchesterColor === 'orange' || result.redFlagDetected
+                  ? 'bg-rose-600 text-white'
+                  : result.manchesterColor === 'yellow'
+                  ? 'bg-amber-500 text-neutral-950'
+                  : 'bg-emerald-600 text-white'
+              }`}>
+                {result.riskLabel || (result.manchesterColor === 'red' || result.manchesterColor === 'orange' || result.redFlagDetected ? '🔴 ALTO RISCO' : result.manchesterColor === 'yellow' ? '🟡 MÉDIO RISCO' : '🟢 BAIXO RISCO')}
+              </span>
+              <span className="text-[11px] font-extrabold uppercase tracking-wider text-neutral-600">
+                Pré-Triagem para Redução de Filas no SUS
+              </span>
+            </div>
+
+            <div className="space-y-2">
+              <span className="text-[11px] font-black uppercase tracking-widest text-neutral-500 block">
+                DEVE IR À UPA?
+              </span>
+              <h3 className="text-xl sm:text-2xl font-black tracking-tight leading-tight">
+                {result.upaVerdict || (
+                  result.redFlagDetected || result.manchesterColor === 'red' || result.manchesterColor === 'orange'
+                    ? '🚨 SIM! PROCURE A UPA 24H OU LIGUE 192 (SAMU) AGORA'
+                    : '🛑 NÃO VÁ À UPA (CUIDE EM CASA COM HIDRATAÇÃO RIGOROSA)'
+                )}
+              </h3>
+              <p className="text-xs sm:text-sm font-medium leading-relaxed">
+                {result.upaRecommendation || (
+                  result.redFlagDetected
+                    ? 'Foram identificados sinais de alarme clínicos (como dor abdominal intensa, vômitos persistentes ou sangramento) que exigem avaliação médica imediata na UPA.'
+                    : 'Seus sintomas apontam para um quadro viral comum sem sinais de alarme no momento. Ficar em casa em repouso e com hidratação abundante evita que você enfrente horas de fila na UPA e se exponha a outras doenças no pronto-socorro.'
+                )}
+              </p>
+            </div>
           </div>
 
           {/* Result Card with Manchester color */}
